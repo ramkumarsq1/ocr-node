@@ -21,18 +21,53 @@
 
 // export default router;
 
-import express from'express'
+// import express from'express'
+// import multer from "multer";
+
+// import {pdfUpload} from'../controllers/ocrPdfExtractController.js'
+// import {fileUpload} from'../controllers/ocrLiveExtractController.js'
+// const router = express.Router()
+// // GET extracted text
+// // router.get('/file-upload',textExtraction)
+
+// const storage = multer.memoryStorage();
+// const upload = multer({ storage });
+
+
+// router.get("/", (req, res) => {
+//     res.send({ response: "I am alive" }).status(200);
+//   });
+
+// // POST a pdf
+// router.post('/pdf', upload.single("pdf"), pdfUpload);
+
+// // POST a filename with page numbers
+// router.post('/file', fileUpload)
+
+// export default router;
+
+import express from 'express';
 import multer from "multer";
 
-import {fileUpload} from'../controllers/ocrExtractController.js'
-const router = express.Router()
-// GET extracted text
-// router.get('/file-upload',textExtraction)
+import { pdfUpload, stopOcrProcess } from '../controllers/ocrPdfExtractController.js';
+import { fileUpload } from '../controllers/ocrLiveExtractController.js';
+
+const router = express.Router();
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// POST a file
-router.post('/upload', upload.single("pdf"), fileUpload)
+router.get("/", (req, res) => {
+    res.send({ response: "I am alive" }).status(200);
+});
+
+// POST a PDF
+router.post('/pdf', upload.single("pdf"), pdfUpload);
+
+// POST a filename with page numbers
+router.post('/file', fileUpload);
+
+// NEW: Stop OCR process
+router.post('/stop', stopOcrProcess);
 
 export default router;

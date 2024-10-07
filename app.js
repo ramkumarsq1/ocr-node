@@ -113,20 +113,65 @@
 
 
 
+// import express from 'express';
+// import 'dotenv/config';
+// import ocrRoutes from './routes/ocrRoutes.js';
+// import multer from "multer";
+// import { createCanvas } from 'canvas';
+// import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+// import Tesseract from 'tesseract.js';
+// import cors from 'cors';
+// import fs from 'fs';
+// import path from 'path';
+// import mysql from 'mysql2';  // Import mysql2
+
+// const app = express();
+// app.use(cors());
+// const port = process.env.PORT || 9000;
+
+// app.use(express.json());
+// app.use(express.urlencoded({ extended: false }));
+
+// // Routes
+// app.use('/api/ocr', ocrRoutes);
+// // Create a connection to MySQL
+// const connection = mysql.createConnection({
+//   host: process.env.DB_HOST,
+//   user: process.env.DB_USER,
+//   password: process.env.DB_PASSWORD,
+//   database: process.env.DB_NAME,
+//   port: process.env.DB_PORT
+// });
+
+
+// // Connect to MySQL
+// connection.connect((err) => {
+//   if (err) {
+//     console.error('Error connecting to MySQL:', err.message);
+//     return;
+//   }
+//   console.log('Connected to MySQL');
+//   // Start the server
+// app.listen(port, () => {
+//   console.log(`Server listening on port: ${port}`);
+// });
+// });
+// =======perfectly working with socket.io
 import express from 'express';
-import 'dotenv/config';
-import ocrRoutes from './routes/ocrRoutes.js';
-import multer from "multer";
-import { createCanvas } from 'canvas';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-import Tesseract from 'tesseract.js';
+import http from 'http';
+import { Server } from 'socket.io';
 import cors from 'cors';
-import fs from 'fs';
-import path from 'path';
-import mysql from 'mysql2';  // Import mysql2
+import ocrRoutes from './routes/ocrRoutes.js';
+import mysql from 'mysql2'; // Import mysql2
+import 'dotenv/config';
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: "http://localhost:3000",
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"]
+}));
+
 const port = process.env.PORT || 9000;
 
 app.use(express.json());
@@ -141,19 +186,39 @@ const connection = mysql.createConnection({
   port: process.env.DB_PORT
 });
 
-// Connect to MySQL
+// Initialize server and Socket.IO variables
+let io;
+
+// Connect to MySQL and then start the server
 connection.connect((err) => {
   if (err) {
     console.error('Error connecting to MySQL:', err.message);
     return;
   }
   console.log('Connected to MySQL');
+
+  // HTTP server and Socket.IO setup after successful DB connection
+  const server = http.createServer(app);
+  io = new Server(server, {
+    cors: { origin: "http://localhost:3000", methods: ["GET", "POST"] }
+  });
+
+  // Routes
+  app.use('/api/ocr', ocrRoutes);
+
+  // Listening for incoming Socket.IO connections
+  io.on("connection", (socket) => {
+    console.log(`User connected: ${socket.id}`);
+    
+    socket.on("disconnect", () => {
+      console.log(`User disconnected: ${socket.id}`);
+    });
+  });
+
+  server.listen(port, () => {
+    console.log(`Server listening on port: ${port}`);
+  });
 });
 
-// Routes
-app.use('/api/ocr', ocrRoutes);
-
-// Start the server
-app.listen(port, () => {
-  console.log(`Server listening on port: ${port}`);
-});
+// Exporting io for use in other modules
+export { io };
