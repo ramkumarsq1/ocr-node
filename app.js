@@ -157,12 +157,77 @@
 // });
 // });
 // =======perfectly working with socket.io
+// import express from 'express';
+// import http from 'http';
+// import { Server } from 'socket.io';
+// import cors from 'cors';
+// import ocrRoutes from './routes/ocrRoutes.js';
+// import mysql from 'mysql2'; // Import mysql2
+// import 'dotenv/config';
+
+// const app = express();
+// app.use(cors({
+//   origin: "http://localhost:3000",
+//   methods: ["GET", "POST"],
+//   allowedHeaders: ["Content-Type"]
+// }));
+
+// const port = process.env.PORT || 9000;
+
+// app.use(express.json());
+// app.use(express.urlencoded({ extended: false }));
+
+// // Create a connection to MySQL
+// const connection = mysql.createConnection({
+//   host: process.env.DB_HOST,
+//   user: process.env.DB_USER,
+//   password: process.env.DB_PASSWORD,
+//   database: process.env.DB_NAME,
+//   port: process.env.DB_PORT
+// });
+
+// // Initialize server and Socket.IO variables
+// let io;
+
+// // Connect to MySQL and then start the server
+// connection.connect((err) => {
+//   if (err) {
+//     console.error('Error connecting to MySQL:', err.message);
+//     return;
+//   }
+//   console.log('Connected to MySQL');
+
+//   // HTTP server and Socket.IO setup after successful DB connection
+//   const server = http.createServer(app);
+//   io = new Server(server, {
+//     cors: { origin: "http://localhost:3000", methods: ["GET", "POST"] }
+//   });
+
+//   // Routes
+//   app.use('/api/ocr', ocrRoutes);
+
+//   // Listening for incoming Socket.IO connections
+//   io.on("connection", (socket) => {
+//     console.log(`User connected: ${socket.id}`);
+    
+//     socket.on("disconnect", () => {
+//       console.log(`User disconnected: ${socket.id}`);
+//     });
+//   });
+
+//   server.listen(port, () => {
+//     console.log(`Server listening on port: ${port}`);
+//   });
+// });
+
+// // Exporting io for use in other modules
+// export { io };
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import ocrRoutes from './routes/ocrRoutes.js';
-import mysql from 'mysql2'; // Import mysql2
+import mysql from 'mysql2';
 import 'dotenv/config';
 
 const app = express();
@@ -173,6 +238,7 @@ app.use(cors({
 }));
 
 const port = process.env.PORT || 9000;
+let io;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -187,8 +253,8 @@ const connection = mysql.createConnection({
 });
 
 // Initialize server and Socket.IO variables
-let io;
 
+export { io }; // Make sure this line exists
 // Connect to MySQL and then start the server
 connection.connect((err) => {
   if (err) {
@@ -220,5 +286,5 @@ connection.connect((err) => {
   });
 });
 
-// Exporting io for use in other modules
-export { io };
+
+
