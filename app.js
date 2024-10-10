@@ -238,7 +238,7 @@ app.use(cors({
 }));
 
 const port = process.env.PORT || 9000;
-let io;
+let io;  // Declare io globally
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -252,10 +252,9 @@ const connection = mysql.createConnection({
   port: process.env.DB_PORT
 });
 
-// Initialize server and Socket.IO variables
+// Store active processing jobs by socket ID
+const activeJobs = new Map();
 
-export { io }; // Make sure this line exists
-// Connect to MySQL and then start the server
 connection.connect((err) => {
   if (err) {
     console.error('Error connecting to MySQL:', err.message);
@@ -263,28 +262,41 @@ connection.connect((err) => {
   }
   console.log('Connected to MySQL');
 
-  // HTTP server and Socket.IO setup after successful DB connection
   const server = http.createServer(app);
-  io = new Server(server, {
-    cors: { origin: "http://localhost:3000", methods: ["GET", "POST"] }
-  });
+  io = new Server(server);  // Initialize io here
 
-  // Routes
-  app.use('/api/ocr', ocrRoutes);
-
-  // Listening for incoming Socket.IO connections
-  io.on("connection", (socket) => {
+  // Set up socket event handlers
+  io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
-    
-    socket.on("disconnect", () => {
+  
+    // Handle disconnection to stop the OCR job
+    socket.on('disconnect', () => {
       console.log(`User disconnected: ${socket.id}`);
+      if (activeJobs.has(socket.id)) {
+        const job = activeJobs.get(socket.id);
+        job.canceled = true; // Set the cancel flag to true
+        activeJobs.delete(socket.id); // Remove the job from active jobs
+        console.log(`Job canceled for socket ID ${socket.id}`);
+      }
+    });
+  
+    // Handle job cancellation from the frontend
+    socket.on('cancel_job', () => {
+      if (activeJobs.has(socket.id)) {
+        const job = activeJobs.get(socket.id);
+        job.canceled = true; // Set the cancel flag to true
+        activeJobs.delete(socket.id); // Remove the job from active jobs
+        console.log(`Job canceled for socket ID ${socket.id}`);
+      }
     });
   });
+  // Use OCR routes
+  app.use('/api/ocr', ocrRoutes);
 
+  // Start the server after setting up socket.io
   server.listen(port, () => {
     console.log(`Server listening on port: ${port}`);
   });
 });
 
-
-
+export { io };  // Export io for use in controllers

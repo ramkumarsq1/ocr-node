@@ -547,7 +547,7 @@ export const pdfUpload = async (req, res) => {
 };
 
 // NEW: Function to stop OCR process
-export const stopOcrProcess = (req, res) => {
+export const stopPdfOcrProcess = (req, res) => {
   const socketId = req.query.socketId;
 
   if (activeJobs.has(socketId)) {
