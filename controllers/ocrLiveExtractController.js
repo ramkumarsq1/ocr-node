@@ -230,29 +230,31 @@ const matchWithDiseases = async (normalizedText) => {
 
   return matchedDiseases;
 };
-
 export const fileUpload = async (req, res) => {
   const { baseUrl, startPage, endPage } = req.body;
   if (!baseUrl) {
-    return res.status(400).send("Please provide a base URL.");
+    console.log("Missing base URL");
+    return res.status(400).json({ error: "Please provide a base URL." });
   }
 
-  const socketId = req.query.socketId; // Get socket ID from query params
+  const socketId = req.query.socketId;
   if (!socketId) {
-    return res.status(400).send("Socket ID is required.");
+    console.log("Missing socket ID");
+    return res.status(400).json({ error: "Socket ID is required." });
   }
 
-  // Notify the client that OCR processing has started
+  // Notify UI about the start of the OCR process
   io.to(socketId).emit("ocr_started", { message: "Processing started" });
 
   const cancelFlag = { canceled: false };
   activeJobs.set(socketId, cancelFlag);
 
+  const results = [];  // To store page results
+
   const processPage = async (pageNumber) => {
-    // Check cancellation immediately
     if (cancelFlag.canceled) {
-      console.log(`Cancellation check before processing page ${pageNumber}`);
-      return; // Stop processing if canceled
+      console.log(`Canceled before processing page ${pageNumber}`);
+      return;
     }
 
     try {
@@ -260,26 +262,14 @@ export const fileUpload = async (req, res) => {
       const response = await fetch(imageUrl);
 
       if (!response.ok) {
+        console.log(`Failed to fetch image for page ${pageNumber}`);
         throw new Error(`Failed to fetch image. Status: ${response.status}`);
       }
 
       const imageBytes = await response.arrayBuffer();
-
-      // Cancellation check right before starting Tesseract
-      if (cancelFlag.canceled) {
-        console.log(`Cancellation check before Tesseract on page ${pageNumber}`);
-        return;
-      }
-
       const { data: { text: ocrText } } = await Tesseract.recognize(imageBytes, "eng", {
         logger: (info) => console.log(info),
       });
-
-      // Another cancellation check after recognition
-      if (cancelFlag.canceled) {
-        console.log(`Cancellation check after Tesseract on page ${pageNumber}`);
-        return;
-      }
 
       const normalizedText = normalizeWhitespace(ocrText.toLowerCase());
       const matchedDiseases = await matchWithDiseases(normalizedText);
@@ -291,40 +281,50 @@ export const fileUpload = async (req, res) => {
         diseases: matchedDiseases.length > 0 ? matchedDiseases : "No diagnosis found",
       };
 
-      // Emit the result for the current page immediately
       io.to(socketId).emit("page_result", { page: pageNumber, result: resultForPage });
+      results.push(resultForPage);
 
     } catch (error) {
       console.error(`Error processing page ${pageNumber}:`, error);
       io.to(socketId).emit("page_result", { page: pageNumber, error: "Error processing page." });
+      results.push({ page: pageNumber, error: "Error processing page." });
     }
   };
 
-  const processInBatches = async (pageNumbers) => {
-    for (let i = 0; i < pageNumbers.length; i++) {
-      // Check cancellation before processing each page
+  const processInBatches = async (pageNumbers, batchSize = 10) => {
+    for (let i = 0; i < pageNumbers.length; i += batchSize) {
       if (cancelFlag.canceled) {
         console.log(`Stopping processing at page ${pageNumbers[i]} due to cancellation.`);
-        return; // Immediately exit if canceled
+        return;
       }
-      await processPage(pageNumbers[i]);
+
+      const batch = pageNumbers.slice(i, i + batchSize);
+      await Promise.all(batch.map(processPage));
     }
   };
 
   try {
     const pageNumbers = Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i);
-    await processInBatches(pageNumbers);
+    await processInBatches(pageNumbers, 10);
 
     if (!cancelFlag.canceled) {
       io.to(socketId).emit("ocr_completed", { message: "Processing completed" });
     }
+
+    // Prepare the final JSON response
+    console.log("Sending final JSON response with results.");
+    
+    // Include the total number of pages in the response
+    return res.json({
+      message: "PDF processing completed",
+      totalPages: endPage - startPage + 1, // total number of pages processed
+      results // results from processing each page
+    });
+
   } catch (error) {
-    console.error("Error processing pages:", error);
-    io.to(socketId).emit("ocr_error", { message: "Error processing pages." });
+    console.error("Error during OCR processing:", error);
+    return res.status(500).json({ error: "Error processing pages." });
   } finally {
-    activeJobs.delete(socketId); // Clean up the job entry
+    activeJobs.delete(socketId); // Clean up after the job
   }
 };
-
-
-
