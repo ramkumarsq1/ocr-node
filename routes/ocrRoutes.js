@@ -52,8 +52,8 @@ import multer from "multer";
 // import { pdfUpload, stopOcrProcess } from '../controllers/ocrPdfExtractController.js';
 // import { fileUpload ,stopOcrProcess} from '../controllers/ocrLiveExtractController.js';
 
-import { pdfUpload, stopOcrProcess } from '../controllers/ocrPdfExtractController.js';
-import { fileUpload, stopLiveOcrProcess } from '../controllers/ocrLiveExtractController.js';
+import { pdfUpload, } from '../controllers/ocrPdfExtractController.js';
+import { fileUpload, } from '../controllers/ocrLiveExtractController.js';
 
 
 const router = express.Router();
@@ -72,12 +72,7 @@ router.post('/pdf', upload.single("pdf"), pdfUpload);
 router.post('/file', fileUpload);
 
 // NEW: Stop OCR process
-<<<<<<< HEAD
-router.post('/stop', stopOcrProcess);
-router.post('/stop/live', stopLiveOcrProcess);
-=======
-router.post('/stop', stopPdfOcrProcess);
-router.post('/stop/live');
->>>>>>> 820f84e7b38457f2e340d5fe613370e4068e9808
+// router.post('/stop', stopOcrProcess);
+// router.post('/stop/live', stopLiveOcrProcess);
 
 export default router;
