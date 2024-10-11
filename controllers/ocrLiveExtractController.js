@@ -162,7 +162,6 @@
 //   res.json(results);
 // };
 
-
 import Tesseract from "tesseract.js";
 import mysql from "mysql2/promise";
 import { io } from "../app.js"; // Ensure you import your Socket.IO instance
@@ -232,42 +231,56 @@ const matchWithDiseases = async (normalizedText) => {
   return matchedDiseases;
 };
 
-// Main function to handle file uploads and processing
 export const fileUpload = async (req, res) => {
   const { baseUrl, startPage, endPage } = req.body;
   if (!baseUrl) {
     return res.status(400).send("Please provide a base URL.");
   }
-  
+
   const socketId = req.query.socketId; // Get socket ID from query params
+  if (!socketId) {
+    return res.status(400).send("Socket ID is required.");
+  }
+
+  // Notify the client that OCR processing has started
   io.to(socketId).emit("ocr_started", { message: "Processing started" });
 
-  // Track the active job
-  activeJobs.set(socketId, { canceled: false });
-  
-  let results = [];
+  const cancelFlag = { canceled: false };
+  activeJobs.set(socketId, cancelFlag);
 
   const processPage = async (pageNumber) => {
-    // Check if the job has been canceled before starting the process
-    if (activeJobs.get(socketId)?.canceled) {
-      throw new Error("Job was canceled");
+    // Check cancellation immediately
+    if (cancelFlag.canceled) {
+      console.log(`Cancellation check before processing page ${pageNumber}`);
+      return; // Stop processing if canceled
     }
 
     try {
       const imageUrl = `https://archdocviewer.cioxhealth.com/docviewer/Handlers/AzureDocViewerHandler.ashx?ataladocpage=${pageNumber - 1}&atala_docurl=${baseUrl}&atala_doczoom=1&atala_thumbpadding=false`;
       const response = await fetch(imageUrl);
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch image. Status: ${response.status}`);
       }
 
       const imageBytes = await response.arrayBuffer();
+
+      // Cancellation check right before starting Tesseract
+      if (cancelFlag.canceled) {
+        console.log(`Cancellation check before Tesseract on page ${pageNumber}`);
+        return;
+      }
+
       const { data: { text: ocrText } } = await Tesseract.recognize(imageBytes, "eng", {
         logger: (info) => console.log(info),
       });
 
-      console.log(`Extracted text from page ${pageNumber}:`, ocrText);
-      
+      // Another cancellation check after recognition
+      if (cancelFlag.canceled) {
+        console.log(`Cancellation check after Tesseract on page ${pageNumber}`);
+        return;
+      }
+
       const normalizedText = normalizeWhitespace(ocrText.toLowerCase());
       const matchedDiseases = await matchWithDiseases(normalizedText);
 
@@ -278,60 +291,40 @@ export const fileUpload = async (req, res) => {
         diseases: matchedDiseases.length > 0 ? matchedDiseases : "No diagnosis found",
       };
 
-      // Emit the result for the current page
+      // Emit the result for the current page immediately
       io.to(socketId).emit("page_result", { page: pageNumber, result: resultForPage });
-      
-      return resultForPage; // Return the result
+
     } catch (error) {
       console.error(`Error processing page ${pageNumber}:`, error);
-      // Emit error information for the page processing
       io.to(socketId).emit("page_result", { page: pageNumber, error: "Error processing page." });
-      
-      return {
-        page: pageNumber,
-        text: "Error processing page.",
-        diseases: "Error fetching diseases",
-        img: "",
-      };
     }
   };
 
-  // Function to process pages in batches
   const processInBatches = async (pageNumbers) => {
-    for (let i = 0; i < pageNumbers.length; i += 10) {
-      const batch = pageNumbers.slice(i, i + 10);
-      const resultsForBatch = await Promise.all(batch.map(processPage));
-      results = [...results, ...resultsForBatch];
-      // Check if the job has been canceled after processing each batch
-      if (activeJobs.get(socketId)?.canceled) {
-        throw new Error("Job was canceled");
+    for (let i = 0; i < pageNumbers.length; i++) {
+      // Check cancellation before processing each page
+      if (cancelFlag.canceled) {
+        console.log(`Stopping processing at page ${pageNumbers[i]} due to cancellation.`);
+        return; // Immediately exit if canceled
       }
+      await processPage(pageNumbers[i]);
     }
   };
+
   try {
     const pageNumbers = Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i);
     await processInBatches(pageNumbers);
-    io.to(socketId).emit("ocr_completed", { message: "Processing completed", results });
+
+    if (!cancelFlag.canceled) {
+      io.to(socketId).emit("ocr_completed", { message: "Processing completed" });
+    }
   } catch (error) {
     console.error("Error processing pages:", error);
     io.to(socketId).emit("ocr_error", { message: "Error processing pages." });
   } finally {
-    // Cleanup: Remove the job from active jobs
-    activeJobs.delete(socketId);
-  }
-
-  res.json(results);
-};
-
-// Function to stop OCR process
-export const stopLiveOcrProcess = (req, res) => {
-  const socketId = req.query.socketId;
-
-  if (activeJobs.has(socketId)) {
-    const job = activeJobs.get(socketId);
-    job.canceled = true; // Set the cancel flag to true
-    res.status(200).send("OCR process stopped.");
-  } else {
-    res.status(404).send("No active OCR process found for this socket ID.");
+    activeJobs.delete(socketId); // Clean up the job entry
   }
 };
+
+
+

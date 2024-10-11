@@ -72,7 +72,12 @@ router.post('/pdf', upload.single("pdf"), pdfUpload);
 router.post('/file', fileUpload);
 
 // NEW: Stop OCR process
+<<<<<<< HEAD
 router.post('/stop', stopOcrProcess);
 router.post('/stop/live', stopLiveOcrProcess);
+=======
+router.post('/stop', stopPdfOcrProcess);
+router.post('/stop/live');
+>>>>>>> 820f84e7b38457f2e340d5fe613370e4068e9808
 
 export default router;
