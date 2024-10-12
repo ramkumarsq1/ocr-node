@@ -222,81 +222,182 @@
 
 // // Exporting io for use in other modules
 // export { io };
+// import express from 'express';
+// import http from 'http';
+// import { Server } from 'socket.io';
+// import cors from 'cors';
+// import ocrRoutes from './routes/ocrRoutes.js';
+// import mysql from 'mysql2';
+// import 'dotenv/config';
+
+// const app = express();
+// app.use(cors({
+//   origin: "http://localhost:3000",
+//   methods: ["GET", "POST"],
+//   allowedHeaders: ["Content-Type"]
+// }));
+
+// const port = process.env.PORT || 9000;
+// let io;  // Declare io globally
+
+// app.use(express.json());
+// app.use(express.urlencoded({ extended: false }));
+
+// // Create a connection to MySQL
+// const connection = mysql.createConnection({
+//   host: process.env.DB_HOST,
+//   user: process.env.DB_USER,
+//   password: process.env.DB_PASSWORD,
+//   database: process.env.DB_NAME,
+//   port: process.env.DB_PORT
+// });
+
+// // Store active processing jobs by socket ID
+// const activeJobs = new Map();
+
+// connection.connect((err) => {
+//   if (err) {
+//     console.error('Error connecting to MySQL:', err.message);
+//     return;
+//   }
+//   console.log('Connected to MySQL');
+
+//   const server = http.createServer(app);
+//   io = new Server(server);  // Initialize io here
+
+//   // Set up socket event handlers
+//   io.on('connection', (socket) => {
+//     console.log(`User connected: ${socket.id}`);
+  
+//     // Handle disconnection to stop the OCR job
+//     socket.on('disconnect', () => {
+//       console.log(`User disconnected: ${socket.id}`);
+//       if (activeJobs.has(socket.id)) {
+//         const job = activeJobs.get(socket.id);
+//         job.canceled = true; // Set the cancel flag to true
+//         activeJobs.delete(socket.id); // Remove the job from active jobs
+//         console.log(`Job canceled for socket ID ${socket.id}`);
+//       }
+//     });
+  
+//     // Handle job cancellation from the frontend
+//     socket.on('cancel_job', () => {
+//       if (activeJobs.has(socket.id)) {
+//         const job = activeJobs.get(socket.id);
+//         job.canceled = true; // Set the cancel flag to true
+//         activeJobs.delete(socket.id); // Remove the job from active jobs
+//         console.log(`Job canceled for socket ID ${socket.id}`);
+//       }
+//     });
+//   });
+//   // Use OCR routes
+//   app.use('/api/ocr', ocrRoutes);
+
+//   // Start the server after setting up socket.io
+//   server.listen(port, () => {
+//     console.log(`Server listening on port: ${port}`);
+//   });
+// });
+
+// export { io };  // Export io for use in controllers
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import ocrRoutes from './routes/ocrRoutes.js';
-import mysql from 'mysql2';
+import mysql from 'mysql2/promise';  // Using promise-based MySQL
+import fetch from 'node-fetch';  // Make sure to install this
 import 'dotenv/config';
 
 const app = express();
+
 app.use(cors({
   origin: "http://localhost:3000",
-  methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type"]
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
 }));
 
 const port = process.env.PORT || 9000;
-let io;  // Declare io globally
+let io;
 
+// Middleware for JSON parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Create a connection to MySQL
-const connection = mysql.createConnection({
+// Create a connection pool to MySQL
+const pool = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  port: process.env.DB_PORT
+  port: process.env.DB_PORT,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
 });
 
 // Store active processing jobs by socket ID
 const activeJobs = new Map();
 
-connection.connect((err) => {
-  if (err) {
-    console.error('Error connecting to MySQL:', err.message);
-    return;
+const server = http.createServer(app);
+io = new Server(server, {
+  cors: {
+    origin: "http://localhost:3000",
+    methods: ["GET", "POST"],
+    credentials: true
   }
-  console.log('Connected to MySQL');
+});
 
-  const server = http.createServer(app);
-  io = new Server(server);  // Initialize io here
+// Set up socket event handlers
+io.on('connection', (socket) => {
+  console.log(`User connected: ${socket.id}`);
 
-  // Set up socket event handlers
-  io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.id}`);
-  
-    // Handle disconnection to stop the OCR job
-    socket.on('disconnect', () => {
-      console.log(`User disconnected: ${socket.id}`);
-      if (activeJobs.has(socket.id)) {
-        const job = activeJobs.get(socket.id);
-        job.canceled = true; // Set the cancel flag to true
-        activeJobs.delete(socket.id); // Remove the job from active jobs
-        console.log(`Job canceled for socket ID ${socket.id}`);
-      }
-    });
-  
-    // Handle job cancellation from the frontend
-    socket.on('cancel_job', () => {
-      if (activeJobs.has(socket.id)) {
-        const job = activeJobs.get(socket.id);
-        job.canceled = true; // Set the cancel flag to true
-        activeJobs.delete(socket.id); // Remove the job from active jobs
-        console.log(`Job canceled for socket ID ${socket.id}`);
-      }
-    });
+  socket.on('disconnect', () => {
+    console.log(`User disconnected: ${socket.id}`);
+    if (activeJobs.has(socket.id)) {
+      const job = activeJobs.get(socket.id);
+      job.canceled = true;  // Cancel the job
+      activeJobs.delete(socket.id);  // Remove the job from active jobs
+      console.log(`Job canceled for socket ID ${socket.id}`);
+    }
   });
-  // Use OCR routes
-  app.use('/api/ocr', ocrRoutes);
 
-  // Start the server after setting up socket.io
-  server.listen(port, () => {
-    console.log(`Server listening on port: ${port}`);
+  socket.on('cancel_job', () => {
+    if (activeJobs.has(socket.id)) {
+      const job = activeJobs.get(socket.id);
+      job.canceled = true;  // Cancel the job
+      activeJobs.delete(socket.id);  // Remove the job from active jobs
+      console.log(`Job canceled for socket ID ${socket.id}`);
+    }
   });
+});
+
+// Use OCR routes
+app.use('/api/ocr', ocrRoutes);
+
+// Proxy route to handle image fetching with CORS
+app.get('/proxy', async (req, res) => {
+  const url = req.query.url;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      return res.status(response.status).send('Failed to fetch the resource');
+    }
+
+    const data = await response.buffer();
+    res.set('Content-Type', response.headers.get('content-type'));
+    res.send(data);
+  } catch (error) {
+    console.error('Error in proxy:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+// Start the server
+server.listen(port, () => {
+  console.log(`Server listening on port: ${port}`);
 });
 
 export { io };  // Export io for use in controllers
