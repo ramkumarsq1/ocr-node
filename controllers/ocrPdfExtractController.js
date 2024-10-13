@@ -452,12 +452,7 @@ const matchWithDiseases = async (normalizedText) => {
     const combinationCodes = await getCombinationCodes(connection, primaryCodes, matchedDiseases);
     matchedDiseases.push(...combinationCodes);
 
-    // console.log("primaryCodes");
-    // console.log(primaryCodes);
-    // console.log("secondaryCodes");
-    // console.log(secondaryCodes);
-    // console.log("combinationCodes");
-    // console.log(combinationCodes);
+
 
 
     // Step 4: Sort matchedDiseases based on index
@@ -473,58 +468,7 @@ const matchWithDiseases = async (normalizedText) => {
   return matchedDiseases;
 };
 
-// Helper function to fetch combination codes from the database
-// const getCombinationCodes = async (connection, primaryCodes, secondaryCodes) => {
-//   let combinationCodes = [];
 
-//   if (primaryCodes.size > 0 && secondaryCodes.size > 0) {
-//     const primaryCodeList = Array.from(primaryCodes).map(code => `'${code}'`).join(',');
-//     const secondaryCodeList = Array.from(secondaryCodes).map(code => `'${code}'`).join(',');
-
-//     // console.log(primaryCodeList);
-//     // console.log(secondaryCodeList);
-
-//     const query = `
-//       SELECT combo_code FROM combination_codes 
-//       WHERE primary_code IN (${primaryCodeList}) 
-//       AND secondary_code IN (${secondaryCodeList})
-//     `;
-
-//     const [results] = await connection.execute(query);
-//     combinationCodes = results.map(row => ({
-//       code: row.combo_code,
-//       description: `Combination of primary codes [${Array.from(primaryCodes).join(', ')}] and secondary codes [${Array.from(secondaryCodes).join(', ')}]`,
-//       label: 'Combination',
-//       index: row.index // Ensure combination codes are added at the end
-//     }));
-//   }
-
-//   return combinationCodes;
-// };
-
-// const getCombinationCodes = async (connection, primaryCodes, matchedDiseases) => {
-//   let combinationCodes = [];
-
-//   for (const primaryCode of primaryCodes) {
-//     const secondaryCodes = await getSecondaryCodesForPrimary(primaryCode, connection);
-
-//     // Check if any of these secondary codes are part of matched diseases
-//     for (const secondaryCode of secondaryCodes) {
-//       // Find the matched disease that corresponds to the secondary code
-//       const matchedDisease = matchedDiseases.find(disease => disease.code === secondaryCode);
-//       if (matchedDisease) {
-//         combinationCodes.push({
-//           code: `Combo-${primaryCode}-${secondaryCode}`, // Custom logic for combo code
-//           description: `Combination of primary code [${primaryCode}] and secondary code [${secondaryCode}]`,
-//           label: 'Combination',
-//           index: matchedDisease.index, // Use the index from the matched disease
-//         });
-//       }
-//     }
-//   }
-
-//   return combinationCodes;
-// };
 
 
 const getCombinationCodes = async (connection, primaryCodes, matchedDiseases) => {
