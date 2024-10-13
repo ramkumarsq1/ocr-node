@@ -293,16 +293,19 @@ export const fileUpload = async (req, res) => {
 
   const processInBatches = async (pageNumbers, batchSize = 10) => {
     for (let i = 0; i < pageNumbers.length; i += batchSize) {
-      if (cancelFlag.canceled) {
-        console.log(`Stopping processing at page ${pageNumbers[i]} due to cancellation.`);
-        return;
-      }
+        if (cancelFlag.canceled) {
+            console.log(`Stopping processing at page ${pageNumbers[i]} due to cancellation.`);
+            return;
+        }
 
-      const batch = pageNumbers.slice(i, i + batchSize);
-      await Promise.all(batch.map(processPage));
+        const batch = pageNumbers.slice(i, i + batchSize);
+
+        // Process each page in the batch sequentially to maintain order
+        for (const page of batch) {
+            await processPage(page);
+        }
     }
-  };
-
+};
   try {
     const pageNumbers = Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i);
     await processInBatches(pageNumbers, 10);
