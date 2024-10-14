@@ -522,7 +522,7 @@ export const pdfUpload = async (req, res) => {
       });
     } else {
       resultForPage.extractedOrder.push({
-        value: "No matched diagnosis found",
+        value: "No diagnosis found",
       });
     }
 
