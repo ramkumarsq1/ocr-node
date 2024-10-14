@@ -316,7 +316,7 @@ export const fileUpload = async (req, res) => {
 
     // Prepare the final JSON response
     console.log("Sending final JSON response with results.");
-    
+
     // Include the total number of pages in the response
     return res.json({
       message: "PDF processing completed",
