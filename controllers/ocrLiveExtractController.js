@@ -1,4 +1,3 @@
-
 // import { createCanvas } from "canvas";
 // import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 // import Tesseract from "tesseract.js";
@@ -181,7 +180,7 @@ const getDbConnection = async () => {
 };
 
 // Utility function to normalize text
-const normalizeWhitespace = (ocrText) => ocrText.replace(/\s+/g, ' ').trim();
+const normalizeWhitespace = (ocrText) => ocrText.replace(/\s+/g, " ").trim();
 
 // Function to match extracted text with database records
 const matchWithDiseases = async (normalizedText) => {
@@ -196,6 +195,8 @@ const matchWithDiseases = async (normalizedText) => {
     const escapeRegex = (string) => {
       return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     };
+    const primaryCodes = new Set(); // To store matched primary codes
+    const secondaryCodes = new Set(); // To store matched secondary codes
 
     diseaseList.forEach(({ description, label, diagnosis_code }) => {
       let regex;
@@ -208,18 +209,45 @@ const matchWithDiseases = async (normalizedText) => {
       }
 
       const matches = [...normalizedText.matchAll(regex)];
+      // if (matches.length > 0) {
+      //   matches.forEach((match) => {
+      //     matchedDiseases.push({
+      //       code: diagnosis_code,
+      //       description: match[0],
+      //       label,
+      //       index: match.index,
+      //     });
+      //   });
       if (matches.length > 0) {
         matches.forEach((match) => {
-          matchedDiseases.push({
+          const diseaseInfo = {
             code: diagnosis_code,
             description: match[0],
             label,
             index: match.index,
-          });
+          };
+
+          matchedDiseases.push(diseaseInfo);
+
+          // Determine if the code is primary or secondary
+          if (isPrimaryCode(diagnosis_code)) {
+            primaryCodes.add(diagnosis_code);
+          } else if (isSecondaryCode(diagnosis_code)) {
+            secondaryCodes.add(diagnosis_code);
+          }
         });
       }
     });
-
+    // Add combination code if both primary and secondary codes are matched
+    if (primaryCodes.has("J44.9") && secondaryCodes.has("F32A")) {
+      matchedDiseases.push({
+        code: "JF321",
+        description:
+          "Combination of primary (J44.9) and secondary (F32A) codes",
+        label: "Combination",
+        // index: Infinity, // Ensure it is added at the end
+      });
+    }
     matchedDiseases.sort((a, b) => a.index - b.index);
   } catch (error) {
     console.error("Error fetching from database:", error);
@@ -229,6 +257,16 @@ const matchWithDiseases = async (normalizedText) => {
   }
 
   return matchedDiseases;
+};
+// Placeholder functions for determining code types
+const isPrimaryCode = (code) => {
+  // Define primary codes (example)
+  return code === "J44.9"; // Modify as needed
+};
+
+const isSecondaryCode = (code) => {
+  // Define secondary codes (example)
+  return code === "F32A"; // Modify as needed
 };
 export const fileUpload = async (req, res) => {
   const { baseUrl, startPage, endPage } = req.body;
@@ -249,7 +287,7 @@ export const fileUpload = async (req, res) => {
   const cancelFlag = { canceled: false };
   activeJobs.set(socketId, cancelFlag);
 
-  const results = [];  // To store page results
+  const results = []; // To store page results
 
   const processPage = async (pageNumber) => {
     if (cancelFlag.canceled) {
@@ -258,7 +296,9 @@ export const fileUpload = async (req, res) => {
     }
 
     try {
-      const imageUrl = `https://archdocviewer.cioxhealth.com/docviewer/Handlers/AzureDocViewerHandler.ashx?ataladocpage=${pageNumber - 1}&atala_docurl=${baseUrl}&atala_doczoom=1&atala_thumbpadding=false`;
+      const imageUrl = `https://archdocviewer.cioxhealth.com/docviewer/Handlers/AzureDocViewerHandler.ashx?ataladocpage=${
+        pageNumber - 1
+      }&atala_docurl=${baseUrl}&atala_doczoom=1&atala_thumbpadding=false`;
       const response = await fetch(imageUrl);
 
       if (!response.ok) {
@@ -267,7 +307,9 @@ export const fileUpload = async (req, res) => {
       }
 
       const imageBytes = await response.arrayBuffer();
-      const { data: { text: ocrText } } = await Tesseract.recognize(imageBytes, "eng", {
+      const {
+        data: { text: ocrText },
+      } = await Tesseract.recognize(imageBytes, "eng", {
         logger: (info) => console.log(info),
       });
 
@@ -278,40 +320,53 @@ export const fileUpload = async (req, res) => {
         page: pageNumber,
         img: imageUrl,
         text: normalizedText,
-        diseases: matchedDiseases.length > 0 ? matchedDiseases : "No diagnosis found",
+        diseases:
+          matchedDiseases.length > 0 ? matchedDiseases : "No diagnosis found",
       };
 
-      io.to(socketId).emit("page_result", { page: pageNumber, result: resultForPage });
+      io.to(socketId).emit("page_result", {
+        page: pageNumber,
+        result: resultForPage,
+      });
       results.push(resultForPage);
-
     } catch (error) {
       console.error(`Error processing page ${pageNumber}:`, error);
-      io.to(socketId).emit("page_result", { page: pageNumber, error: "Error processing page." });
+      io.to(socketId).emit("page_result", {
+        page: pageNumber,
+        error: "Error processing page.",
+      });
       results.push({ page: pageNumber, error: "Error processing page." });
     }
   };
 
   const processInBatches = async (pageNumbers, batchSize = 10) => {
     for (let i = 0; i < pageNumbers.length; i += batchSize) {
-        if (cancelFlag.canceled) {
-            console.log(`Stopping processing at page ${pageNumbers[i]} due to cancellation.`);
-            return;
-        }
+      if (cancelFlag.canceled) {
+        console.log(
+          `Stopping processing at page ${pageNumbers[i]} due to cancellation.`
+        );
+        return;
+      }
 
-        const batch = pageNumbers.slice(i, i + batchSize);
+      const batch = pageNumbers.slice(i, i + batchSize);
 
-        // Process each page in the batch sequentially to maintain order
-        for (const page of batch) {
-            await processPage(page);
-        }
+      // Process each page in the batch sequentially to maintain order
+      for (const page of batch) {
+        await processPage(page);
+      }
     }
-};
+  };
   try {
-    const pageNumbers = Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i);
+    const pageNumbers = Array.from(
+      { length: endPage - startPage + 1 },
+      (_, i) => startPage + i
+    );
     await processInBatches(pageNumbers, 10);
 
     if (!cancelFlag.canceled) {
-      io.to(socketId).emit("ocr_completed", { message: "Processing completed" });
+      io.to(socketId).emit("ocr_completed", {
+        message: "Processing completed",
+      });
     }
 
     // Prepare the final JSON response
@@ -321,9 +376,8 @@ export const fileUpload = async (req, res) => {
     return res.json({
       message: "PDF processing completed",
       totalPages: endPage - startPage + 1, // total number of pages processed
-      results // results from processing each page
+      results, // results from processing each page
     });
-
   } catch (error) {
     console.error("Error during OCR processing:", error);
     return res.status(500).json({ error: "Error processing pages." });

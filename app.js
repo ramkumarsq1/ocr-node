@@ -443,13 +443,117 @@
 
 // // Exporting io for use in other modules
 // export { io };
+
+// ==LIVE MAIN CODE
+// import express from 'express';
+// import http from 'http';
+// import { Server } from 'socket.io';
+// import cors from 'cors';
+// import ocrRoutes from './routes/ocrRoutes.js';
+// import mysql from 'mysql2/promise';  // Using promise-based MySQL
+// import fetch from 'node-fetch';  // Make sure to install this
+// import 'dotenv/config';
+
+// const app = express();
+
+// app.use(cors({
+//   origin: "http://localhost:3000",
+//   methods: ["GET", "POST", "PUT", "DELETE"],
+//   allowedHeaders: ["Content-Type", "Authorization"],
+//   credentials: true
+// }));
+
+// const port = process.env.PORT || 9000;
+// let io;
+
+// // Middleware for JSON parsing
+// app.use(express.json());
+// app.use(express.urlencoded({ extended: false }));
+
+// // Create a connection pool to MySQL
+// const pool = mysql.createPool({
+//   host: process.env.DB_HOST,
+//   user: process.env.DB_USER,
+//   password: process.env.DB_PASSWORD,
+//   database: process.env.DB_NAME,
+//   port: process.env.DB_PORT,
+//   waitForConnections: true,
+//   connectionLimit: 10,
+//   queueLimit: 0
+// });
+
+// // Store active processing jobs by socket ID
+// const activeJobs = new Map();
+
+// const server = http.createServer(app);
+// io = new Server(server, {
+//   cors: {
+//     origin: "http://localhost:3000",
+//     methods: ["GET", "POST"],
+//     credentials: true
+//   }
+// });
+
+// // Set up socket event handlers
+// io.on('connection', (socket) => {
+//   console.log(`User connected: ${socket.id}`);
+
+//   socket.on('disconnect', () => {
+//     console.log(`User disconnected: ${socket.id}`);
+//     if (activeJobs.has(socket.id)) {
+//       const job = activeJobs.get(socket.id);
+//       job.canceled = true;  // Cancel the job
+//       activeJobs.delete(socket.id);  // Remove the job from active jobs
+//       console.log(`Job canceled for socket ID ${socket.id}`);
+//     }
+//   });
+
+//   socket.on('cancel_job', () => {
+//     if (activeJobs.has(socket.id)) {
+//       const job = activeJobs.get(socket.id);
+//       job.canceled = true;  // Cancel the job
+//       activeJobs.delete(socket.id);  // Remove the job from active jobs
+//       console.log(`Job canceled for socket ID ${socket.id}`);
+//     }
+//   });
+// });
+
+// // Use OCR routes
+// app.use('/api/ocr', ocrRoutes);
+
+// // Proxy route to handle image fetching with CORS
+// app.get('/proxy', async (req, res) => {
+//   const url = req.query.url;
+
+//   try {
+//     const response = await fetch(url);
+//     if (!response.ok) {
+//       return res.status(response.status).send('Failed to fetch the resource');
+//     }
+
+//     const data = await response.buffer();
+//     res.set('Content-Type', response.headers.get('content-type'));
+//     res.send(data);
+//   } catch (error) {
+//     console.error('Error in proxy:', error);
+//     res.status(500).send('Internal Server Error');
+//   }
+// });
+
+// // Start the server
+// server.listen(port, () => {
+//   console.log(`Server listening on port: ${port}`);
+// });
+
+// export { io };  // Export io for use in controllers
+
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import ocrRoutes from './routes/ocrRoutes.js';
-import mysql from 'mysql2/promise';  // Using promise-based MySQL
-import fetch from 'node-fetch';  // Make sure to install this
+import mysql from 'mysql2/promise'; // Using promise-based MySQL
+import fetch from 'node-fetch'; // Make sure to install this
 import 'dotenv/config';
 
 const app = express();
@@ -500,8 +604,8 @@ io.on('connection', (socket) => {
     console.log(`User disconnected: ${socket.id}`);
     if (activeJobs.has(socket.id)) {
       const job = activeJobs.get(socket.id);
-      job.canceled = true;  // Cancel the job
-      activeJobs.delete(socket.id);  // Remove the job from active jobs
+      job.canceled = true; // Cancel the job
+      activeJobs.delete(socket.id); // Remove the job from active jobs
       console.log(`Job canceled for socket ID ${socket.id}`);
     }
   });
@@ -509,8 +613,8 @@ io.on('connection', (socket) => {
   socket.on('cancel_job', () => {
     if (activeJobs.has(socket.id)) {
       const job = activeJobs.get(socket.id);
-      job.canceled = true;  // Cancel the job
-      activeJobs.delete(socket.id);  // Remove the job from active jobs
+      job.canceled = true; // Cancel the job
+      activeJobs.delete(socket.id); // Remove the job from active jobs
       console.log(`Job canceled for socket ID ${socket.id}`);
     }
   });
@@ -538,9 +642,24 @@ app.get('/proxy', async (req, res) => {
   }
 });
 
-// Start the server
-server.listen(port, () => {
-  console.log(`Server listening on port: ${port}`);
-});
+// Function to start the server
+async function startServer() {
+  try {
+    const connection = await pool.getConnection();
+    console.log('MySQL connected successfully.');
+    connection.release(); // Release the connection back to the pool
 
-export { io };  // Export io for use in controllers
+    // Start the server only after a successful MySQL connection
+    server.listen(port, () => {
+      console.log(`Server listening on port: ${port}`);
+    });
+  } catch (error) {
+    console.error('Error connecting to MySQL:', error);
+    process.exit(1); // Exit the process if unable to connect
+  }
+}
+
+// Start the server
+startServer();
+
+export { io }; // Export io for use in controllers
