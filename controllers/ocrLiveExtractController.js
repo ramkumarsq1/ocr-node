@@ -186,7 +186,8 @@ const normalizeWhitespace = (ocrText) => ocrText.replace(/\s+/g, " ").trim();
 const matchWithDiseases = async (normalizedText) => {
   const connection = await getDbConnection();
   let matchedDiseases = [];
-
+  let primaryCodes = new Set();
+  let secondaryCodes = new Set();
   try {
     const [diseaseList] = await connection.execute(
       "SELECT diagnosis_code, LOWER(description) AS description, label FROM medical_data"
@@ -195,10 +196,60 @@ const matchWithDiseases = async (normalizedText) => {
     const escapeRegex = (string) => {
       return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     };
-    const primaryCodes = new Set(); // To store matched primary codes
-    const secondaryCodes = new Set(); // To store matched secondary codes
+    
 
-    diseaseList.forEach(({ description, label, diagnosis_code }) => {
+    // diseaseList.forEach(({ description, label, diagnosis_code }) => {
+    //   let regex;
+
+    //   if (diagnosis_code === "Regex") {
+    //     regex = new RegExp(description, "gi");
+    //   } else {
+    //     const escapedDescription = escapeRegex(description);
+    //     regex = new RegExp(`\\b${escapedDescription}\\b`, "gi");
+    //   }
+
+    //   const matches = [...normalizedText.matchAll(regex)];
+    //   // if (matches.length > 0) {
+    //   //   matches.forEach((match) => {
+    //   //     matchedDiseases.push({
+    //   //       code: diagnosis_code,
+    //   //       description: match[0],
+    //   //       label,
+    //   //       index: match.index,
+    //   //     });
+    //   //   });
+    //   if (matches.length > 0) {
+    //     matches.forEach((match) => {
+    //       const diseaseInfo = {
+    //         code: diagnosis_code,
+    //         description: match[0],
+    //         label,
+    //         index: match.index,
+    //       };
+
+    //       matchedDiseases.push(diseaseInfo);
+
+    //       // Determine if the code is primary or secondary
+    //       if (isPrimaryCode(diagnosis_code)) {
+    //         primaryCodes.add(diagnosis_code);
+    //       } else if (isSecondaryCode(diagnosis_code)) {
+    //         secondaryCodes.add(diagnosis_code);
+    //       }
+    //     });
+    //   }
+    // });
+    // // Add combination code if both primary and secondary codes are matched
+    // if (primaryCodes.has("J44.9") && secondaryCodes.has("F32A")) {
+    //   matchedDiseases.push({
+    //     code: "JF321",
+    //     description:
+    //       "Combination of primary (J44.9) and secondary (F32A) codes",
+    //     label: "Combination",
+    //     // index: Infinity, // Ensure it is added at the end
+    //   });
+    // }
+    // matchedDiseases.sort((a, b) => a.index - b.index);
+    for (const { description, label, diagnosis_code } of diseaseList) {
       let regex;
 
       if (diagnosis_code === "Regex") {
@@ -209,17 +260,9 @@ const matchWithDiseases = async (normalizedText) => {
       }
 
       const matches = [...normalizedText.matchAll(regex)];
-      // if (matches.length > 0) {
-      //   matches.forEach((match) => {
-      //     matchedDiseases.push({
-      //       code: diagnosis_code,
-      //       description: match[0],
-      //       label,
-      //       index: match.index,
-      //     });
-      //   });
+
       if (matches.length > 0) {
-        matches.forEach((match) => {
+        for (const match of matches) {
           const diseaseInfo = {
             code: diagnosis_code,
             description: match[0],
@@ -230,24 +273,35 @@ const matchWithDiseases = async (normalizedText) => {
           matchedDiseases.push(diseaseInfo);
 
           // Determine if the code is primary or secondary
-          if (isPrimaryCode(diagnosis_code)) {
-            primaryCodes.add(diagnosis_code);
-          } else if (isSecondaryCode(diagnosis_code)) {
-            secondaryCodes.add(diagnosis_code);
+          const isPrimary = await isPrimaryCode(diagnosis_code, connection);
+          const isSecondary = await isSecondaryCode(diagnosis_code, connection);
+
+          if (diagnosis_code !== "Regex" && diagnosis_code !== "null") {
+            if (isPrimary) {
+              primaryCodes.add(diagnosis_code);
+            } else if (isSecondary) {
+              secondaryCodes.add(diagnosis_code);
+              // console.log(diagnosis_code);
+              // console.log(secondaryCodes);
+            }
           }
-        });
+        }
       }
-    });
-    // Add combination code if both primary and secondary codes are matched
-    if (primaryCodes.has("J44.9") && secondaryCodes.has("F32A")) {
-      matchedDiseases.push({
-        code: "JF321",
-        description:
-          "Combination of primary (J44.9) and secondary (F32A) codes",
-        label: "Combination",
-        // index: Infinity, // Ensure it is added at the end
-      });
     }
+
+    // Step 3: Fetch combination codes based on matched primary and secondary codes
+    const combinationCodes = await getCombinationCodes(connection, primaryCodes, matchedDiseases);
+    matchedDiseases.push(...combinationCodes);
+
+    // console.log("primaryCodes");
+    // console.log(primaryCodes);
+    // console.log("secondaryCodes");
+    // console.log(secondaryCodes);
+    // console.log("combinationCodes");
+    // console.log(combinationCodes);
+
+
+    // Step 4: Sort matchedDiseases based on index
     matchedDiseases.sort((a, b) => a.index - b.index);
   } catch (error) {
     console.error("Error fetching from database:", error);
@@ -258,15 +312,72 @@ const matchWithDiseases = async (normalizedText) => {
 
   return matchedDiseases;
 };
-// Placeholder functions for determining code types
-const isPrimaryCode = (code) => {
-  // Define primary codes (example)
-  return code === "J44.9"; // Modify as needed
+
+const getCombinationCodes = async (connection, primaryCodes, matchedDiseases) => {
+  let combinationCodes = [];
+
+  for (const primaryCode of primaryCodes) {
+    const secondaryCodes = await getSecondaryCodesForPrimary(primaryCode, connection);
+
+    // Check if any of these secondary codes are part of matched diseases
+    for (const secondaryCode of secondaryCodes) {
+      // Find the matched disease that corresponds to the secondary code
+      const matchedDisease = matchedDiseases.find(disease => disease.code === secondaryCode);
+      if (matchedDisease) {
+        const comboCode = await fetchCombinationCodeFromDb(connection, primaryCode, secondaryCode);
+
+        if (comboCode) {
+          combinationCodes.push({
+            code: comboCode, // Get the combo code from the database
+            description: `Combination of primary code ${primaryCode} and secondary code ${secondaryCode}`,
+            label: 'Combination',
+            index: matchedDisease.index !== undefined ? matchedDisease.index : Infinity, // Use the index from the matched disease
+          });
+        }
+      }
+    }
+  }
+
+  return combinationCodes;
 };
 
-const isSecondaryCode = (code) => {
-  // Define secondary codes (example)
-  return code === "F32A"; // Modify as needed
+
+// Function to determine if a code is primary based on the database
+const isPrimaryCode = async (code, connection) => {
+  const [primaryCodes] = await connection.execute(
+    "SELECT primary_code FROM combination_codes WHERE primary_code = ?",
+    [code]
+  );
+  // console.log(primaryCodes);
+  return primaryCodes.length > 0;
+};
+
+// Function to determine if a code is secondary based on the database
+const isSecondaryCode = async (code, connection) => {
+  const [secondaryCodes] = await connection.execute(
+    "SELECT secondary_code FROM combination_codes WHERE secondary_code = ?",
+    [code]
+  );
+  return secondaryCodes.length > 0;
+};
+
+// Function to fetch all secondary codes for a given primary code
+const getSecondaryCodesForPrimary = async (primaryCode, connection) => {
+  const [results] = await connection.execute(
+    "SELECT secondary_code FROM combination_codes WHERE primary_code = ?",
+    [primaryCode]
+  );
+  return results.map(row => row.secondary_code);
+};
+
+
+// Function to fetch the combination code from the database
+const fetchCombinationCodeFromDb = async (connection, primaryCode, secondaryCode) => {
+  const [results] = await connection.execute(
+    "SELECT combo_code FROM combination_codes WHERE primary_code = ? AND secondary_code = ?",
+    [primaryCode, secondaryCode]
+  );
+  return results.length > 0 ? results[0].combo_code : null; // Return the combo code or null if not found
 };
 export const fileUpload = async (req, res) => {
   const { baseUrl, startPage, endPage } = req.body;
