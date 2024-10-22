@@ -1,166 +1,3 @@
-// import { createCanvas } from "canvas";
-// import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
-// import Tesseract from "tesseract.js";
-// import mysql from "mysql2/promise";
-
-// // Function to get a database connection
-// const getDbConnection = async () => {
-//   return mysql.createConnection({
-//     host: process.env.DB_HOST,
-//     user: process.env.DB_USER,
-//     password: process.env.DB_PASSWORD,
-//     database: process.env.DB_NAME,
-//     port: process.env.DB_PORT,
-//   });
-// };
-
-// // Function to render a PDF page into an image
-// async function pdfPageToImage(pdfBuffer, pageIndex) {
-//   const pdfDocument = await pdfjsLib.getDocument({
-//     data: new Uint8Array(pdfBuffer),
-//   }).promise;
-//   const page = await pdfDocument.getPage(pageIndex + 1);
-//   const viewport = page.getViewport({ scale: 2.0 });
-//   const canvas = createCanvas(viewport.width, viewport.height);
-//   const context = canvas.getContext("2d");
-
-//   await page.render({
-//     canvasContext: context,
-//     viewport: viewport,
-//   }).promise;
-
-//   return canvas.toBuffer(); // Convert the rendered canvas to an image buffer
-// }
-// // Utility function to normalize text (removing extra spaces and converting to lowercase)
-// const normalizeWhitespace = (text) => text.replace(/\s+/g, ' ').trim().toLowerCase();
-
-// // Function to match extracted text with database records
-// const matchWithDiseases = async (normalizedText) => {
-//   const connection = await getDbConnection();
-//   let matchedDiseases = [];
-
-//   try {
-//     const [diseaseList] = await connection.execute(
-//       "SELECT diagnosis_code, LOWER(description) AS description, label FROM medical_data"
-//     );
-
-//     const escapeRegex = (string) => {
-//       return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // Escape special characters
-//     };
-
-//     diseaseList.forEach(({ description, label, diagnosis_code }) => {
-//       let regex;
-
-//       if (diagnosis_code === "Regex") {
-//         regex = new RegExp(description, "gi");
-//       } else {
-//         const escapedDescription = escapeRegex(description);
-//         regex = new RegExp(`\\b${escapedDescription}\\b`, "gi");
-//       }
-
-//       const matches = [...normalizedText.matchAll(regex)];
-//       if (matches.length > 0) {
-//         matches.forEach((match) => {
-//           matchedDiseases.push({
-//             code: diagnosis_code,
-//             description: match[0],
-//             label,
-//             index: match.index,
-//           });
-//         });
-//       }
-//     });
-
-//     matchedDiseases.sort((a, b) => a.index - b.index);
-//   } catch (error) {
-//     console.error("Error fetching from database:", error);
-//     throw error;
-//   } finally {
-//     await connection.end();
-//   }
-
-//   return matchedDiseases;
-// };
-
-// // Function to extract dates from text using provided patterns
-// const extractDates = (text, datePatterns) => {
-//   const dates = new Set();
-//   datePatterns.forEach((pattern) => {
-//     const matches = text.match(pattern);
-//     if (matches) {
-//       matches.forEach((date) => dates.add(date));
-//     }
-//   });
-//   return Array.from(dates);
-// };
-// const datePatterns = [
-//     /(?:published on|date of birth|encounter date|date|generated on|created on|updated on|dob|date reviewed|date of issue|Problem List as of)\s*[:\-—\s]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\s*(?:\d{1,2}:\d{2}\s*[APM]{2})?/gi,
-//   ];
-// // Main function to handle file uploads and processing
-// export const fileUpload = async (req, res) => {
-//   const { baseUrl, startPage, endPage} = req.body;
-//   if (!baseUrl) {
-//     return res.status(400).send("Please provide a base URL.");
-//   }
-
-//   // Initialize results array and set for batch processing
-//   let results = [];
-
-//   // Function to process a single page
-//   const processPage = async (pageNumber) => {
-//     try {
-//       const imageUrl = `https://archdocviewer.cioxhealth.com/docviewer/Handlers/AzureDocViewerHandler.ashx?ataladocpage=${pageNumber - 1}&atala_docurl=${baseUrl}&atala_doczoom=1&atala_thumbpadding=false`;
-//       const response = await fetch(imageUrl);
-//       if (!response.ok) {
-//         throw new Error(`Failed to fetch image. Status: ${response.status}`);
-//       }
-
-//       const imageBytes = await response.arrayBuffer();
-//       const { data: { text } } = await Tesseract.recognize(imageBytes, "eng", {
-//         logger: (info) => console.log(info),
-//       });
-
-//       const normalizedText = normalizeWhitespace(text);
-//       const matchedDiseases = await matchWithDiseases(normalizedText);
-//       const dates = extractDates(text, datePatterns);
-
-//       return {
-//         page: pageNumber,
-//         img: imageUrl,
-//         text: normalizedText,
-//         diseases: matchedDiseases.length > 0 ? matchedDiseases : "No diseases found",
-//         // dates: dates.length > 0 ? dates : "No dates found",
-//       };
-
-//     } catch (error) {
-//       console.error(`Error processing page ${pageNumber}:`, error);
-//       return {
-//         page: pageNumber,
-//         text: "Error processing page.",
-//         diseases: "Error fetching diseases",
-//         // dates: "Error extracting dates",
-//         img: "",
-//       };
-//     }
-//   };
-//   // Function to process pages in batches
-//   const processInBatches = async (pageNumbers) => {
-//     for (let i = 0; i < pageNumbers.length; i += 10) {
-//       const batch = pageNumbers.slice(i, i + 10);
-//       const resultsForBatch = await Promise.all(batch.map(processPage));
-//       results = [...results, ...resultsForBatch];
-//     }
-//   };
-//   try {
-//     const pageNumbers = Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i);
-//     await processInBatches(pageNumbers);
-//   } catch (error) {
-//     console.error("Error processing pages:", error);
-//   }
-
-//   res.json(results);
-// };
-
 import Tesseract from "tesseract.js";
 import mysql from "mysql2/promise";
 import { io } from "../app.js"; // Ensure you import your Socket.IO instance
@@ -196,59 +33,7 @@ const matchWithDiseases = async (normalizedText) => {
     const escapeRegex = (string) => {
       return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     };
-    
 
-    // diseaseList.forEach(({ description, label, diagnosis_code }) => {
-    //   let regex;
-
-    //   if (diagnosis_code === "Regex") {
-    //     regex = new RegExp(description, "gi");
-    //   } else {
-    //     const escapedDescription = escapeRegex(description);
-    //     regex = new RegExp(`\\b${escapedDescription}\\b`, "gi");
-    //   }
-
-    //   const matches = [...normalizedText.matchAll(regex)];
-    //   // if (matches.length > 0) {
-    //   //   matches.forEach((match) => {
-    //   //     matchedDiseases.push({
-    //   //       code: diagnosis_code,
-    //   //       description: match[0],
-    //   //       label,
-    //   //       index: match.index,
-    //   //     });
-    //   //   });
-    //   if (matches.length > 0) {
-    //     matches.forEach((match) => {
-    //       const diseaseInfo = {
-    //         code: diagnosis_code,
-    //         description: match[0],
-    //         label,
-    //         index: match.index,
-    //       };
-
-    //       matchedDiseases.push(diseaseInfo);
-
-    //       // Determine if the code is primary or secondary
-    //       if (isPrimaryCode(diagnosis_code)) {
-    //         primaryCodes.add(diagnosis_code);
-    //       } else if (isSecondaryCode(diagnosis_code)) {
-    //         secondaryCodes.add(diagnosis_code);
-    //       }
-    //     });
-    //   }
-    // });
-    // // Add combination code if both primary and secondary codes are matched
-    // if (primaryCodes.has("J44.9") && secondaryCodes.has("F32A")) {
-    //   matchedDiseases.push({
-    //     code: "JF321",
-    //     description:
-    //       "Combination of primary (J44.9) and secondary (F32A) codes",
-    //     label: "Combination",
-    //     // index: Infinity, // Ensure it is added at the end
-    //   });
-    // }
-    // matchedDiseases.sort((a, b) => a.index - b.index);
     for (const { description, label, diagnosis_code } of diseaseList) {
       let regex;
 
@@ -281,8 +66,6 @@ const matchWithDiseases = async (normalizedText) => {
               primaryCodes.add(diagnosis_code);
             } else if (isSecondary) {
               secondaryCodes.add(diagnosis_code);
-              // console.log(diagnosis_code);
-              // console.log(secondaryCodes);
             }
           }
         }
@@ -290,16 +73,12 @@ const matchWithDiseases = async (normalizedText) => {
     }
 
     // Step 3: Fetch combination codes based on matched primary and secondary codes
-    const combinationCodes = await getCombinationCodes(connection, primaryCodes, matchedDiseases);
+    const combinationCodes = await getCombinationCodes(
+      connection,
+      primaryCodes,
+      matchedDiseases
+    );
     matchedDiseases.push(...combinationCodes);
-
-    // console.log("primaryCodes");
-    // console.log(primaryCodes);
-    // console.log("secondaryCodes");
-    // console.log(secondaryCodes);
-    // console.log("combinationCodes");
-    // console.log(combinationCodes);
-
 
     // Step 4: Sort matchedDiseases based on index
     matchedDiseases.sort((a, b) => a.index - b.index);
@@ -313,25 +92,41 @@ const matchWithDiseases = async (normalizedText) => {
   return matchedDiseases;
 };
 
-const getCombinationCodes = async (connection, primaryCodes, matchedDiseases) => {
+const getCombinationCodes = async (
+  connection,
+  primaryCodes,
+  matchedDiseases
+) => {
   let combinationCodes = [];
 
   for (const primaryCode of primaryCodes) {
-    const secondaryCodes = await getSecondaryCodesForPrimary(primaryCode, connection);
+    const secondaryCodes = await getSecondaryCodesForPrimary(
+      primaryCode,
+      connection
+    );
 
     // Check if any of these secondary codes are part of matched diseases
     for (const secondaryCode of secondaryCodes) {
       // Find the matched disease that corresponds to the secondary code
-      const matchedDisease = matchedDiseases.find(disease => disease.code === secondaryCode);
+      const matchedDisease = matchedDiseases.find(
+        (disease) => disease.code === secondaryCode
+      );
       if (matchedDisease) {
-        const comboCode = await fetchCombinationCodeFromDb(connection, primaryCode, secondaryCode);
+        const comboCode = await fetchCombinationCodeFromDb(
+          connection,
+          primaryCode,
+          secondaryCode
+        );
 
         if (comboCode) {
           combinationCodes.push({
             code: comboCode, // Get the combo code from the database
             description: `Combination of primary code ${primaryCode} and secondary code ${secondaryCode}`,
-            label: 'Combination',
-            index: matchedDisease.index !== undefined ? matchedDisease.index : Infinity, // Use the index from the matched disease
+            label: "Combination",
+            index:
+              matchedDisease.index !== undefined
+                ? matchedDisease.index
+                : Infinity, // Use the index from the matched disease
           });
         }
       }
@@ -340,7 +135,6 @@ const getCombinationCodes = async (connection, primaryCodes, matchedDiseases) =>
 
   return combinationCodes;
 };
-
 
 // Function to determine if a code is primary based on the database
 const isPrimaryCode = async (code, connection) => {
@@ -367,12 +161,15 @@ const getSecondaryCodesForPrimary = async (primaryCode, connection) => {
     "SELECT secondary_code FROM combination_codes WHERE primary_code = ?",
     [primaryCode]
   );
-  return results.map(row => row.secondary_code);
+  return results.map((row) => row.secondary_code);
 };
 
-
 // Function to fetch the combination code from the database
-const fetchCombinationCodeFromDb = async (connection, primaryCode, secondaryCode) => {
+const fetchCombinationCodeFromDb = async (
+  connection,
+  primaryCode,
+  secondaryCode
+) => {
   const [results] = await connection.execute(
     "SELECT combo_code FROM combination_codes WHERE primary_code = ? AND secondary_code = ?",
     [primaryCode, secondaryCode]
@@ -430,7 +227,7 @@ export const fileUpload = async (req, res) => {
       const resultForPage = {
         page: pageNumber,
         img: imageUrl,
-        text: normalizedText,
+        // text: normalizedText,
         diseases:
           matchedDiseases.length > 0 ? matchedDiseases : "No diagnosis found",
       };
@@ -496,3 +293,226 @@ export const fileUpload = async (req, res) => {
     activeJobs.delete(socketId); // Clean up after the job
   }
 };
+
+// import Tesseract from "tesseract.js";
+// import mysql from "mysql2/promise";
+
+// // Track active jobs for cancellation
+// const activeJobs = new Map();
+
+// // Get a database connection
+// const getDbConnection = async () => {
+//   return mysql.createConnection({
+//     host: process.env.DB_HOST,
+//     user: process.env.DB_USER,
+//     password: process.env.DB_PASSWORD,
+//     database: process.env.DB_NAME,
+//     port: process.env.DB_PORT,
+//   });
+// };
+
+// // Normalize OCR text
+// const normalizeWhitespace = (ocrText) => ocrText.replace(/\s+/g, " ").trim();
+
+// // Match text with diseases from the database
+// const matchWithDiseases = async (normalizedText) => {
+//   const connection = await getDbConnection();
+//   let matchedDiseases = [];
+//   let primaryCodes = new Set();
+
+//   try {
+//     const [diseaseList] = await connection.execute(
+//       "SELECT diagnosis_code, LOWER(description) AS description, label FROM medical_data"
+//     );
+
+//     const escapeRegex = (string) =>
+//       string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+//     for (const { description, label, diagnosis_code } of diseaseList) {
+//       const regex = new RegExp(`\\b${escapeRegex(description)}\\b`, "gi");
+//       const matches = [...normalizedText.matchAll(regex)];
+
+//       if (matches.length > 0) {
+//         for (const match of matches) {
+//           const diseaseInfo = {
+//             code: diagnosis_code,
+//             description: match[0],
+//             label,
+//             index: match.index,
+//           };
+//           matchedDiseases.push(diseaseInfo);
+
+//           if (await isPrimaryCode(diagnosis_code, connection)) {
+//             primaryCodes.add(diagnosis_code);
+//           }
+//         }
+//       }
+//     }
+
+//     // Fetch combination codes
+//     const combinationCodes = await getCombinationCodes(
+//       connection,
+//       primaryCodes,
+//       matchedDiseases
+//     );
+//     matchedDiseases.push(...combinationCodes);
+
+//     // Sort diseases by their position in the text
+//     matchedDiseases.sort((a, b) => a.index - b.index);
+//   } finally {
+//     await connection.end();
+//   }
+
+//   return matchedDiseases;
+// };
+
+// // Determine if a code is primary
+// const isPrimaryCode = async (code, connection) => {
+//   const [primaryCodes] = await connection.execute(
+//     "SELECT primary_code FROM combination_codes WHERE primary_code = ?",
+//     [code]
+//   );
+//   return primaryCodes.length > 0;
+// };
+
+// // Fetch secondary codes for a primary code
+// const getSecondaryCodesForPrimary = async (primaryCode, connection) => {
+//   const [results] = await connection.execute(
+//     "SELECT secondary_code FROM combination_codes WHERE primary_code = ?",
+//     [primaryCode]
+//   );
+//   return results.map((row) => row.secondary_code);
+// };
+
+// // Fetch combination codes from the database
+// const getCombinationCodes = async (
+//   connection,
+//   primaryCodes,
+//   matchedDiseases
+// ) => {
+//   let combinationCodes = [];
+
+//   for (const primaryCode of primaryCodes) {
+//     const secondaryCodes = await getSecondaryCodesForPrimary(
+//       primaryCode,
+//       connection
+//     );
+
+//     for (const secondaryCode of secondaryCodes) {
+//       const matchedDisease = matchedDiseases.find(
+//         (d) => d.code === secondaryCode
+//       );
+//       if (matchedDisease) {
+//         const comboCode = await fetchCombinationCodeFromDb(
+//           connection,
+//           primaryCode,
+//           secondaryCode
+//         );
+//         if (comboCode) {
+//           combinationCodes.push({
+//             code: comboCode,
+//             description: `Combination of ${primaryCode} and ${secondaryCode}`,
+//             label: "Combination",
+//             index: matchedDisease.index ?? Infinity,
+//           });
+//         }
+//       }
+//     }
+//   }
+
+//   return combinationCodes;
+// };
+
+// // Fetch a combination code from the database
+// const fetchCombinationCodeFromDb = async (
+//   connection,
+//   primaryCode,
+//   secondaryCode
+// ) => {
+//   const [results] = await connection.execute(
+//     "SELECT combo_code FROM combination_codes WHERE primary_code = ? AND secondary_code = ?",
+//     [primaryCode, secondaryCode]
+//   );
+//   return results.length > 0 ? results[0].combo_code : null;
+// };
+
+// // Process a single page
+// const processPage = async (pageNumber, baseUrl, cancelFlag) => {
+//   if (cancelFlag.canceled) return { page: pageNumber, error: "Canceled" };
+
+//   try {
+//     // const imageUrl = `${baseUrl}&page=${pageNumber - 1}`;
+//     const imageUrl = `https://archdocviewer.cioxhealth.com/docviewer/Handlers/AzureDocViewerHandler.ashx?ataladocpage=${
+//       pageNumber - 1
+//     }&atala_docurl=${baseUrl}&atala_doczoom=1&atala_thumbpadding=false`;
+//     const response = await fetch(imageUrl);
+
+//     if (!response.ok) {
+//       throw new Error(`Failed to fetch image for page ${pageNumber}`);
+//     }
+
+//     const imageBytes = await response.arrayBuffer();
+//     const {
+//       data: { text: ocrText },
+//     } = await Tesseract.recognize(imageBytes, "eng");
+
+//     const normalizedText = normalizeWhitespace(ocrText.toLowerCase());
+//     const matchedDiseases = await matchWithDiseases(normalizedText);
+
+//     return {
+//       page: pageNumber,
+//       // img: imageUrl,
+//       // text: normalizedText,
+//       diseases:
+//         matchedDiseases.length > 0 ? matchedDiseases : "No diagnosis found",
+//     };
+//   } catch (error) {
+//     console.error(`Error processing page ${pageNumber}:`, error);
+//     return { page: pageNumber, error: "Error processing page." };
+//   }
+// };
+
+// // Controller to start file processing
+// export const fileUpload = async (req, res) => {
+//   const { baseUrl, startPage, endPage } = req.body;
+//   if (!baseUrl || !startPage || !endPage) {
+//     return res.status(400).json({ error: "Missing required parameters." });
+//   }
+
+//   const cancelFlag = { canceled: false };
+//   const jobId = `${Date.now()}`;
+//   activeJobs.set(jobId, cancelFlag);
+
+//   const results = [];
+//   const pageNumbers = Array.from(
+//     { length: endPage - startPage + 1 },
+//     (_, i) => startPage + i
+//   );
+
+//   try {
+//     for (const pageNumber of pageNumbers) {
+//       const result = await processPage(pageNumber, baseUrl, cancelFlag);
+//       results.push(result);
+//       if (cancelFlag.canceled) break;
+//     }
+
+//     activeJobs.delete(jobId);
+//     return res.json({ message: "Processing completed", results });
+//   } catch (error) {
+//     console.error("Processing Error:", error);
+//     return res.status(500).json({ error: "Failed to process pages." });
+//   }
+// };
+
+// // Cancel an active job
+// export const cancelJob = (req, res) => {
+//   const { jobId } = req.body;
+//   const job = activeJobs.get(jobId);
+
+//   if (job) {
+//     job.canceled = true;
+//     return res.json({ message: `Job ${jobId} canceled successfully.` });
+//   } else {
+//     return res.status(404).json({ error: "Job not found." });
+//   }
+// };
