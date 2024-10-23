@@ -633,9 +633,9 @@ export const liveUpload = async (req, res) => {
   io.to(socketId).emit("ocr_started", { message: "Processing started" });
 
   const config = { lang: 'eng', oem: 1, psm: 4 }; // Adjusted for faster processing
-  const resultsPerPage = 8;
+  const resultsPerPage =5;
   const totalPages = parseInt(endPage);
-  const limit = pLimit(2); // Limit concurrent processing to 5 pages at a time
+  const limit = pLimit(5); // Limit concurrent processing to 5 pages at a time
 
   // Function to process a single page concurrently
   const processPage = async (pageNumber) => {
