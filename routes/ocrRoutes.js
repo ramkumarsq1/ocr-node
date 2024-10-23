@@ -54,6 +54,7 @@ import multer from "multer";
 
 import { pdfUpload,stopOcrProcess } from '../controllers/ocrPdfExtractController.js';
 import { fileUpload, } from '../controllers/ocrLiveExtractController.js';
+import { liveUpload,getPaginationResults } from '../controllers/ocrLive.js';
 
 
 const router = express.Router();
@@ -64,12 +65,14 @@ const upload = multer({ storage });
 router.get("/", (req, res) => {
     res.send({ response: "I am alive" }).status(200);
 });
+router.get('/pagination', getPaginationResults);
 
 // POST a PDF
 router.post('/pdf', upload.single("pdf"), pdfUpload);
 
 // POST a filename with page numbers
 router.post('/file', fileUpload);
+router.post('/live', liveUpload);
 
 // NEW: Stop OCR process
 router.post('/stop', stopOcrProcess);
